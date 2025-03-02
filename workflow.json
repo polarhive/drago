@@ -1,0 +1,22 @@
+[
+  {
+    "id": "start",
+    "dependencies": []
+  },
+  {
+    "id": "process-data",
+    "dependencies": ["start"]
+  },
+  {
+    "id": "validate-results",
+    "dependencies": ["start"]
+  },
+  {
+    "id": "generate-report",
+    "dependencies": ["process-data", "validate-results"]
+  },
+  {
+    "id": "send-notification",
+    "dependencies": ["generate-report"]
+  }
+]
