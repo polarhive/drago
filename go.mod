@@ -1,4 +1,4 @@
-module drago
+module github.com/polarhive/drago
 
 go 1.24.0
 
