@@ -1,22 +1,35 @@
 [
   {
     "id": "start",
+    "type": "trigger",
     "dependencies": []
   },
   {
-    "id": "process-data",
-    "dependencies": ["start"]
+    "id": "process",
+    "type": "compute",
+    "dependencies": [
+      "start"
+    ]
   },
   {
-    "id": "validate-results",
-    "dependencies": ["start"]
+    "id": "decision",
+    "type": "decision",
+    "dependencies": [
+      "process"
+    ]
   },
   {
-    "id": "generate-report",
-    "dependencies": ["process-data", "validate-results"]
+    "id": "api-call",
+    "type": "api",
+    "dependencies": [
+      "decision"
+    ]
   },
   {
-    "id": "send-notification",
-    "dependencies": ["generate-report"]
+    "id": "end",
+    "type": "action",
+    "dependencies": [
+      "api-call"
+    ]
   }
 ]
