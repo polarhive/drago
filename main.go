@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -212,17 +213,21 @@ func (w *Workflow) topologicalSort() []string {
 
 // Simulated node handlers
 func (w *Workflow) handleTrigger(node *Node) bool {
+	time.Sleep(time.Millisecond * 200)
 	return true // Always succeed
 }
 
 func (w *Workflow) handleCompute(node *Node) bool {
+	time.Sleep(time.Millisecond * 500)
 	return rand.Float32() < 0.8 // 80% success rate
 }
 
 func (w *Workflow) handleDecision(node *Node) bool {
+	time.Sleep(time.Millisecond * 100)
 	return true // Always succeed
 }
 
 func (w *Workflow) handleAPI(node *Node) bool {
+	time.Sleep(time.Millisecond * 300)
 	return rand.Float32() < 0.6 // 60% success rate
 }
