@@ -22,3 +22,22 @@ drago/
 └── nodes/
     └── nodes.go     # definitions and handlers
 ```
+
+## Performance?
+
+- memoization?
+- metrics?
+- benchmarks
+
+## Caching, memory? Write to mock db
+
+- KV.go?
+
+## Usecases
+
+### Chaos Test
+
+### Ride/Cab booking example
+
+- Spawn multiple producers/consumers
+- Race

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"os"
 
 	"github.com/polarhive/drago/dag"
 	"github.com/polarhive/drago/workflow"
@@ -24,7 +25,11 @@ func main() {
 
 	// Validate workflow
 	if err := d.Validate(); err != nil {
-		logger.Fatal("Invalid workflow", zap.Error(err))
+		logger.Error("Workflow validation failed",
+			zap.Error(err),
+			zap.String("action", "validation failed, aborting execution"),
+		)
+		os.Exit(1)
 	}
 
 	// Create and run workflow
