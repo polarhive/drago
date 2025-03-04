@@ -1,104 +1,228 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
+	"bufio"
+	"flag"
+	"fmt"
+	"math/rand"
 	"os"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
-/*
-- Trigger: A node that starts a workflow
-- Condition: A node that checks a condition and decides which path to take; if-else condition or a decision tree (state machine / switch-case)
-- Loop: A node that repeats a set of nodes for a certain number of times or until a condition is met. Typically used to process a list / array of items.
-- Compute: A node that performs a computation (transform data, filter data, aggregate data, etc). This can be a simple JS script or an executable (firecracker, wasm, etc)
-- Action: A node that performs an action(external / internal calls), outputs data, or triggers another workflow
-*/
-
-// Node represents a single unit of work in a workflow
-type Node struct {
-	ID           string    `json:"id"`
-	State        NodeState `json:"state"`
-	Dependencies []string  `json:"dependencies"`
-}
-
-// NodeState represents the state of a node in the workflow
 type NodeState string
 
-// Possible values for NodeState
 const (
-	Pending NodeState = "Pending"
-	Running NodeState = "Running"
-	Success NodeState = "Success"
-	Failed  NodeState = "Failed"
+	Pending  NodeState = "pending"
+	Running  NodeState = "running"
+	Success  NodeState = "success"
+	Failed   NodeState = "failed"
+	Retrying NodeState = "retrying"
 )
 
-// Workflow represents a collection of nodes connected as a DAG
-// Nodes can be triggers, conditions, actions, etc
-// Workflow is thread-safe [todo]
-// Workflow execution is parallelized [todo]
+type Node struct {
+	ID           string
+	Dependencies []string
+	State        NodeState
+	Retries      int
+	Type         string
+}
+
+type DAG struct {
+	mu     sync.RWMutex
+	nodes  map[string]*Node
+	edges  map[string][]string
+	logger *zap.Logger
+}
+
 type Workflow struct {
-	Nodes map[string]*Node
-	Mutex sync.Mutex // todo
+	dag      *DAG
+	workers  int
+	stepMode bool
+	logger   *zap.Logger
 }
 
-func NewWorkflow() *Workflow {
-	return &Workflow{Nodes: make(map[string]*Node)}
-	// todo
+func main() {
+	workers := flag.Int("workers", 2, "Number of paralel workers")
+	stepMode := flag.Bool("step", false, "Step mode")
+	flag.Parse()
+
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+
+	dag := &DAG{
+		nodes:  make(map[string]*Node),
+		edges:  make(map[string][]string),
+		logger: logger,
+	}
+
+	// ex: workflow setup
+	createSampleDAG(dag)
+
+	workflow := &Workflow{
+		dag:      dag,
+		workers:  *workers,
+		stepMode: *stepMode,
+		logger:   logger,
+	}
+
+	if *stepMode {
+		workflow.RunStepMode()
+	} else {
+		workflow.RunParallel()
+	}
 }
 
-// AddNode adds a new node to the workflow
-func (w *Workflow) AddNode(node *Node) {
-	w.Nodes[node.ID] = node
+func createSampleDAG(dag *DAG) {
+	nodes := []*Node{
+		{ID: "start", Type: "trigger"},
+		{ID: "process", Type: "compute", Dependencies: []string{"start"}},
+		{ID: "decision", Type: "decision", Dependencies: []string{"process"}},
+		{ID: "api-call", Type: "api", Dependencies: []string{"decision"}},
+		{ID: "end", Type: "action", Dependencies: []string{"api-call"}},
+	}
+
+	for _, node := range nodes {
+		dag.AddNode(node)
+	}
 }
 
-// Executes the workflow
-func (w *Workflow) Run() {
-	log.Println("Starting Workflow Execution")
+func (d *DAG) AddNode(node *Node) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	node.State = Pending
+	d.nodes[node.ID] = node
+	d.edges[node.ID] = node.Dependencies
+}
+
+func (w *Workflow) RunParallel() {
+	executionOrder := w.topologicalSort()
+	sem := make(chan struct{}, w.workers)
 	var wg sync.WaitGroup
 
-	for _, node := range w.Nodes {
+	for _, nodeID := range executionOrder {
+		node := w.dag.nodes[nodeID]
 		wg.Add(1)
+		sem <- struct{}{}
+
 		go func(n *Node) {
 			defer wg.Done()
-			w.executeNode(n)
+			defer func() { <-sem }()
+			w.processNode(n)
 		}(node)
 	}
 
 	wg.Wait()
-	log.Println("Workflow Execution Completed")
+	w.logger.Info("Workflow completed")
 }
 
-// Executes a single node in the workflow
-func (w *Workflow) executeNode(node *Node) {
-	log.Printf("Executing node: %s\n", node.ID)
-	node.State = Running
-	log.Printf("Node %s is in state: %s\n", node.ID, node.State)
-	// todo
-	node.State = Success
+func (w *Workflow) RunStepMode() {
+	executionOrder := w.topologicalSort()
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for _, nodeID := range executionOrder {
+		node := w.dag.nodes[nodeID]
+		w.logger.Info("Next node",
+			zap.String("node", node.ID),
+			zap.Strings("dependencies", node.Dependencies),
+		)
+
+		fmt.Print("Press Enter to execute...")
+		scanner.Scan()
+		w.processNode(node)
+	}
 }
 
-// LoadWorkflowFromJSON loads a workflow from a JSON file
-func LoadWorkflowFromJSON(filename string) *Workflow {
-	file, err := os.ReadFile(filename)
-	if err != nil {
-		log.Fatalf("Failed to read file: %v", err)
+func (w *Workflow) processNode(node *Node) {
+	w.updateNodeState(node, Running)
+
+	// Simulate different processing based on node type
+	var success bool
+	switch node.Type {
+	case "trigger":
+		success = w.handleTrigger(node)
+	case "compute":
+		success = w.handleCompute(node)
+	case "decision":
+		success = w.handleDecision(node)
+	case "api":
+		success = w.handleAPI(node)
+	default:
+		success = true
 	}
 
-	var nodes []Node
-	err = json.Unmarshal(file, &nodes)
-	if err != nil {
-		log.Fatalf("Failed to unmarshal JSON: %v", err)
+	if success {
+		w.updateNodeState(node, Success)
+	} else if node.Retries < 3 {
+		w.updateNodeState(node, Retrying)
+		node.Retries++
+		w.processNode(node)
+	} else {
+		w.updateNodeState(node, Failed)
 	}
-
-	workflow := NewWorkflow()
-	for _, node := range nodes {
-		workflow.AddNode(&node)
-	}
-	return workflow
 }
 
-func main() {
-	workflow := LoadWorkflowFromJSON("workflow.json")
-	workflow.Run()
+func (w *Workflow) updateNodeState(node *Node, state NodeState) {
+	w.dag.mu.Lock()
+	defer w.dag.mu.Unlock()
+	node.State = state
+	w.logger.Info("Node state updated",
+		zap.String("node", node.ID),
+		zap.String("state", string(state)),
+	)
+}
+
+func (w *Workflow) topologicalSort() []string {
+	w.dag.mu.RLock()
+	defer w.dag.mu.RUnlock()
+
+	inDegree := make(map[string]int)
+	queue := make([]string, 0)
+	order := make([]string, 0)
+
+	// Initialize in-degree
+	for nodeID := range w.dag.nodes {
+		inDegree[nodeID] = 0
+	}
+
+	// Find start nodes
+	for nodeID, deg := range inDegree {
+		if deg == 0 {
+			queue = append(queue, nodeID)
+		}
+	}
+
+	// Topo sort
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+		order = append(order, node)
+
+		for _, neighbor := range w.dag.edges[node] {
+			inDegree[neighbor]--
+			if inDegree[neighbor] == 0 {
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+
+	return order
+}
+
+// Simulated node handlers
+func (w *Workflow) handleTrigger(node *Node) bool {
+	return true // Always succeed
+}
+
+func (w *Workflow) handleCompute(node *Node) bool {
+	return rand.Float32() < 0.8 // 80% success rate
+}
+
+func (w *Workflow) handleDecision(node *Node) bool {
+	return true // Always succeed
+}
+
+func (w *Workflow) handleAPI(node *Node) bool {
+	return rand.Float32() < 0.6 // 60% success rate
 }
