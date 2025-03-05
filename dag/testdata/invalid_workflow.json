@@ -1,0 +1,7 @@
+[
+  {
+    "id": "process",
+    "type": "compute",
+    "dependencies": ["non-existent-node"]
+  }
+]

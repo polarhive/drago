@@ -1,0 +1,23 @@
+[
+  {
+    "id": "node1",
+    "type": "trigger",
+    "dependencies": [
+      "node3"
+    ]
+  },
+  {
+    "id": "node2",
+    "type": "compute",
+    "dependencies": [
+      "node1"
+    ]
+  },
+  {
+    "id": "node3",
+    "type": "decision",
+    "dependencies": [
+      "node2"
+    ]
+  }
+]

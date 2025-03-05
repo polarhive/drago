@@ -3,3 +3,4 @@
 .json
 SPEC.md
 drago
+!dag/testdata/**

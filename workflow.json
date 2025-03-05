@@ -1,35 +1,21 @@
 [
   {
-    "id": "start",
+    "id": "sensor-ingest",
     "type": "trigger",
     "dependencies": []
   },
   {
-    "id": "process",
+    "id": "validate-data",
     "type": "compute",
     "dependencies": [
-      "start"
+      "sensor-ingest"
     ]
   },
   {
-    "id": "decision",
-    "type": "decision",
-    "dependencies": [
-      "process"
-    ]
-  },
-  {
-    "id": "api-call",
+    "id": "store-db",
     "type": "api",
     "dependencies": [
-      "decision"
-    ]
-  },
-  {
-    "id": "end",
-    "type": "action",
-    "dependencies": [
-      "api-call"
+      "validate-data"
     ]
   }
 ]
