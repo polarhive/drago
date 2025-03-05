@@ -79,8 +79,8 @@ func (w *Workflow) processNode(node *nodes.Node) {
 	w.updateNodeState(node, nodes.Running)
 	params := nodes.NodeTypes[node.Type]
 
-	success := w.executeNode(node, params)
-	
+	success := w.executeNode(params)
+
 	switch {
 	case success:
 		w.updateNodeState(node, nodes.Success)
@@ -94,7 +94,7 @@ func (w *Workflow) processNode(node *nodes.Node) {
 	}
 }
 
-func (w *Workflow) executeNode(node *nodes.Node, params nodes.ExecutionParameters) bool {
+func (w *Workflow) executeNode(params nodes.ExecutionParameters) bool {
 	time.Sleep(params.BaseDelay)
 	return rand.Float32() < params.SuccessRate
 }
