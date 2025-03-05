@@ -10,6 +10,7 @@ import (
 
 	"github.com/polarhive/drago/dag"
 	"github.com/polarhive/drago/nodes"
+	"github.com/polarhive/drago/storage"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +19,15 @@ type Workflow struct {
 	workers  int
 	stepMode bool
 	logger   *zap.Logger
+	kv       *storage.KV
+}
+
+func (w *Workflow) Get(key string) (any, bool) {
+	return w.kv.Get(key)
+}
+
+func (w *Workflow) Set(key string, value any) {
+	w.kv.Set(key, value)
 }
 
 func NewWorkflow(d *dag.DAG, workers int, stepMode bool, logger *zap.Logger) *Workflow {
@@ -26,6 +36,7 @@ func NewWorkflow(d *dag.DAG, workers int, stepMode bool, logger *zap.Logger) *Wo
 		workers:  workers,
 		stepMode: stepMode,
 		logger:   logger,
+		kv:       storage.NewKV(),
 	}
 }
 
@@ -79,11 +90,21 @@ func (w *Workflow) processNode(node *nodes.Node) {
 	w.updateNodeState(node, nodes.Running)
 	params := nodes.NodeTypes[node.Type]
 
-	success := w.executeNode(params)
+	inputs := make(map[string]any)
+	for _, key := range node.InputKeys {
+		if val, exists := w.Get(key); exists {
+			inputs[key] = val
+		}
+	}
+
+	success := w.executeNode(node, params, inputs)
 
 	switch {
 	case success:
 		w.updateNodeState(node, nodes.Success)
+		if node.OutputKey != "" {
+			w.Set(node.OutputKey, fmt.Sprintf("result-%s", node.ID))
+		}
 	case node.Retries < params.MaxRetries:
 		w.updateNodeState(node, nodes.Retrying)
 		node.Retries++
@@ -94,7 +115,13 @@ func (w *Workflow) processNode(node *nodes.Node) {
 	}
 }
 
-func (w *Workflow) executeNode(params nodes.ExecutionParameters) bool {
+// now, with inputs
+func (w *Workflow) executeNode(node *nodes.Node, params nodes.ExecutionParameters, inputs map[string]interface{}) bool {
+	w.logger.Debug("Executing node",
+		zap.String("node", node.ID),
+		zap.Any("inputs", inputs),
+	)
+
 	time.Sleep(params.BaseDelay)
 	return rand.Float32() < params.SuccessRate
 }

@@ -1,8 +1,6 @@
-package workflow
+package storage
 
-import (
-	"sync"
-)
+import "sync"
 
 type KV struct {
 	store map[string]any

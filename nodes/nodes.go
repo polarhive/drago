@@ -16,6 +16,8 @@ type Node struct {
 	ID           string
 	Type         string
 	Dependencies []string
+	InputKeys    []string
+	OutputKey    string
 	State        NodeState
 	Retries      int
 }
