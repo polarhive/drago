@@ -9,7 +9,7 @@
 		- [x] Check that all dependencies exist in the node list.
 		- [x] Check that there are no cycles in the graph.
 	- [x] If validation passes, proceed to run the simulation; otherwise, output errors.
-- [x Add tests
+- [x] Add tests
 
 ## Think about how to structure the project??
 
@@ -33,9 +33,21 @@ drago/
 
 ## Caching, memory? Write to mock db
 
-- KV.go?
+- [x] KV.go?
+
+- [ ] JSON configureable rules 
 
 ## Usecases
+
+### Max temp
+
+- a sample workflow that ingests max temp from sensors
+	- set kv 
+	- more sensors ingest data
+	- get kv
+	- rule check > max 
+	- set or skip
+	- quit
 
 ### Chaos Test
 
