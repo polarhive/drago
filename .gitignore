@@ -4,3 +4,5 @@
 SPEC.md
 drago
 !dag/testdata/**
+!cmd/**
+loadtest

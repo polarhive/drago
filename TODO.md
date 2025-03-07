@@ -54,4 +54,4 @@ drago/
 ### Ride/Cab booking example
 
 - Spawn multiple producers/consumers
-- Race
+- [x] Race
