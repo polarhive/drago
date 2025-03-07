@@ -1,14 +1,18 @@
 [
   {
-    "id": "sensor-ingest",
+    "id": "http-trigger",
     "type": "trigger",
-    "dependencies": []
+    "dependencies": [],
+    "outputKey": "request_data"
   },
   {
     "id": "validate-data",
     "type": "compute",
     "dependencies": [
-      "sensor-ingest"
+      "http-trigger"
+    ],
+    "inputKeys": [
+      "request_data"
     ]
   },
   {
