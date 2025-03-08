@@ -16,6 +16,8 @@ import (
 func main() {
 	workers := flag.Int("workers", 2, "Number of parallel workers")
 	apiPort := flag.Int("port", 8080, "API server port")
+	stepMode := flag.Bool("step", false, "Step mode")
+
 	flag.Parse()
 
 	logger, _ := zap.NewProduction()
@@ -36,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	router := gin.Default()	
+	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
@@ -44,16 +46,16 @@ func main() {
 	// Workflow trigger endpoint
 	router.POST("/trigger", func(c *gin.Context) {
 		start := time.Now()
-		
-		wf := workflow.NewWorkflow(d, *workers, false, logger)
-		
+
+		wf := workflow.NewWorkflow(d, *workers, *stepMode, logger)
+
 		// Store input data
 		var input map[string]interface{}
 		if err := c.BindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
 			return
 		}
-		
+
 		// Set input data in workflow storage
 		for k, v := range input {
 			wf.Set(k, v)
@@ -69,7 +71,7 @@ func main() {
 		}()
 
 		c.JSON(http.StatusAccepted, gin.H{
-			"message":  "workflow started",
+			"message":    "workflow started",
 			"started_at": start.Format(time.RFC3339),
 		})
 	})
