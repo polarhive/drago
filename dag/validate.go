@@ -1,64 +1,63 @@
 package dag
 
-import "fmt"
+import (
+	"fmt"
+)
 
+// Validate checks the DAG for missing dependencies, invalid node types, and cycles.
 func (d *DAG) Validate() error {
 	d.Mu.RLock()
 	defer d.Mu.RUnlock()
 
-	// Validate dependencies exist
+	if err := d.checkDependenciesAndTypes(); err != nil {
+		return err
+	}
+	if cyclic, cycle := d.detectCycles(); cyclic {
+		return fmt.Errorf("cycle detected: %v", cycle)
+	}
+	return nil
+}
+
+// Combined check for missing dependencies and invalid node types.
+func (d *DAG) checkDependenciesAndTypes() error {
+	validTypes := map[string]struct{}{
+		"trigger": {}, "compute": {}, "decision": {}, "api": {}, "action": {},
+	}
+
 	for _, node := range d.Nodes {
+		if _, valid := validTypes[node.Type]; !valid {
+			return fmt.Errorf("invalid node type '%s' for node %s", node.Type, node.ID)
+		}
 		for _, dep := range node.Dependencies {
 			if _, exists := d.Nodes[dep]; !exists {
 				return fmt.Errorf("node %s has missing dependency: %s", node.ID, dep)
 			}
 		}
 	}
-
-	// Validate no cycles
-	if cyclic, cycle := d.isCyclic(); cyclic {
-		return fmt.Errorf("cycle detected: %v", cycle)
-	}
-
-	// Validate node types
-	validTypes := map[string]bool{
-		"trigger":  true,
-		"compute":  true,
-		"decision": true,
-		"api":      true,
-		"action":   true,
-	}
-	for _, node := range d.Nodes {
-		if !validTypes[node.Type] {
-			return fmt.Errorf("invalid node type %s for node %s", node.Type, node.ID)
-		}
-	}
-
 	return nil
 }
 
-func (d *DAG) isCyclic() (bool, []string) {
+// checks for cycles in the DAG using DFS.
+func (d *DAG) detectCycles() (bool, []string) {
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
 	var cycle []string
 
 	for nodeID := range d.Nodes {
-		if !visited[nodeID] {
-			if d.detectCycle(nodeID, visited, recStack, &cycle) {
-				return true, cycle
-			}
+		if !visited[nodeID] && d.hasCycle(nodeID, visited, recStack, &cycle) {
+			return true, cycle
 		}
 	}
 	return false, nil
 }
 
-func (d *DAG) detectCycle(nodeID string, visited, recStack map[string]bool, cycle *[]string) bool {
-	visited[nodeID] = true
-	recStack[nodeID] = true
+// DFS to detect cycles in the DAG.
+func (d *DAG) hasCycle(nodeID string, visited, recStack map[string]bool, cycle *[]string) bool {
+	visited[nodeID], recStack[nodeID] = true, true
 
 	for _, neighbor := range d.Edges[nodeID] {
 		if !visited[neighbor] {
-			if d.detectCycle(neighbor, visited, recStack, cycle) {
+			if d.hasCycle(neighbor, visited, recStack, cycle) {
 				*cycle = append(*cycle, nodeID)
 				return true
 			}
@@ -67,7 +66,6 @@ func (d *DAG) detectCycle(nodeID string, visited, recStack map[string]bool, cycl
 			return true
 		}
 	}
-
 	recStack[nodeID] = false
 	return false
 }

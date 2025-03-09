@@ -1,4 +1,5 @@
 # build bins
+export GIN_MODE=release
 go build
 go build -o loadtest cmd/loadtest/main.go
 

@@ -22,14 +22,17 @@ type Workflow struct {
 	kv       *storage.KV
 }
 
+// Retrieve a value from key-value storage
 func (w *Workflow) Get(key string) (any, bool) {
 	return w.kv.Get(key)
 }
 
+// Store a value in key-value storage
 func (w *Workflow) Set(key string, value any) {
 	w.kv.Set(key, value)
 }
 
+// Create a new workflow instance
 func NewWorkflow(d *dag.DAG, workers int, stepMode bool, logger *zap.Logger) *Workflow {
 	return &Workflow{
 		dag:      d,
@@ -40,20 +43,22 @@ func NewWorkflow(d *dag.DAG, workers int, stepMode bool, logger *zap.Logger) *Wo
 	}
 }
 
+// Execute the workflow
 func (w *Workflow) Run() {
+	executionOrder := w.topologicalSort()
 	if w.stepMode {
-		w.RunStepMode()
+		w.runStepMode(executionOrder)
 	} else {
-		w.RunParallel()
+		w.runParallel(executionOrder)
 	}
 }
 
-func (w *Workflow) RunParallel() {
-	executionOrder := w.topologicalSort()
+// Execute workflow nodes in parallel with worker limits
+func (w *Workflow) runParallel(order []string) {
 	sem := make(chan struct{}, w.workers)
 	var wg sync.WaitGroup
 
-	for _, nodeID := range executionOrder {
+	for _, nodeID := range order {
 		node := w.dag.Nodes[nodeID]
 		wg.Add(1)
 		sem <- struct{}{}
@@ -69,11 +74,11 @@ func (w *Workflow) RunParallel() {
 	w.logger.Info("Workflow completed")
 }
 
-func (w *Workflow) RunStepMode() {
-	executionOrder := w.topologicalSort()
+// Execute workflow nodes step by step (manual user confirmation)
+func (w *Workflow) runStepMode(order []string) {
 	scanner := bufio.NewScanner(os.Stdin)
 
-	for _, nodeID := range executionOrder {
+	for _, nodeID := range order {
 		node := w.dag.Nodes[nodeID]
 		w.logger.Info("Next node",
 			zap.String("node", node.ID),
@@ -86,9 +91,9 @@ func (w *Workflow) RunStepMode() {
 	}
 }
 
+// Execute a node based on its type and input data
 func (w *Workflow) processNode(node *nodes.Node) {
 	w.updateNodeState(node, nodes.Running)
-	params := nodes.NodeTypes[node.Type]
 
 	inputs := make(map[string]any)
 	for _, key := range node.InputKeys {
@@ -97,25 +102,28 @@ func (w *Workflow) processNode(node *nodes.Node) {
 		}
 	}
 
+	params := nodes.NodeTypes[node.Type]
 	success := w.executeNode(node, params, inputs)
 
-	switch {
-	case success:
+	if success {
 		w.updateNodeState(node, nodes.Success)
 		if node.OutputKey != "" {
 			w.Set(node.OutputKey, fmt.Sprintf("result-%s", node.ID))
 		}
-	case node.Retries < params.MaxRetries:
-		w.updateNodeState(node, nodes.Retrying)
+		return
+	}
+
+	// Retry logic
+	if node.Retries < params.MaxRetries {
 		node.Retries++
 		time.Sleep(time.Duration(node.Retries) * params.RetryBackoff)
 		w.processNode(node)
-	default:
+	} else {
 		w.updateNodeState(node, nodes.Failed)
 	}
 }
 
-// now, with inputs
+// Simulate node execution based on success probability
 func (w *Workflow) executeNode(node *nodes.Node, params nodes.ExecutionParameters, inputs map[string]interface{}) bool {
 	w.logger.Debug("Executing node",
 		zap.String("node", node.ID),
@@ -126,6 +134,7 @@ func (w *Workflow) executeNode(node *nodes.Node, params nodes.ExecutionParameter
 	return rand.Float32() < params.SuccessRate
 }
 
+// Update the state of a node in the DAG
 func (w *Workflow) updateNodeState(node *nodes.Node, state nodes.NodeState) {
 	w.dag.Mu.Lock()
 	defer w.dag.Mu.Unlock()
@@ -136,6 +145,7 @@ func (w *Workflow) updateNodeState(node *nodes.Node, state nodes.NodeState) {
 	)
 }
 
+// Perform a topological sort to determine execution order
 func (w *Workflow) topologicalSort() []string {
 	w.dag.Mu.RLock()
 	defer w.dag.Mu.RUnlock()
@@ -144,16 +154,19 @@ func (w *Workflow) topologicalSort() []string {
 	queue := make([]string, 0)
 	order := make([]string, 0)
 
+	// Calculate in-degrees for all nodes
 	for _, node := range w.dag.Nodes {
 		inDegree[node.ID] = len(node.Dependencies)
 	}
 
+	// Identify nodes with no dependencies (ready to execute)
 	for nodeID, deg := range inDegree {
 		if deg == 0 {
 			queue = append(queue, nodeID)
 		}
 	}
 
+	// Process nodes in topological order
 	for len(queue) > 0 {
 		nodeID := queue[0]
 		queue = queue[1:]

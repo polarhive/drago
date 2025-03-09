@@ -1,0 +1,114 @@
+[
+  {
+    "id": "http-trigger",
+    "type": "trigger",
+    "dependencies": [],
+    "outputKey": "request_data"
+  },
+  {
+    "id": "validate-input",
+    "type": "compute",
+    "dependencies": [
+      "http-trigger"
+    ],
+    "inputKeys": [
+      "request_data"
+    ],
+    "outputKey": "validated_data"
+  },
+  {
+    "id": "transform-data",
+    "type": "compute",
+    "dependencies": [
+      "validate-input"
+    ],
+    "inputKeys": [
+      "validated_data"
+    ],
+    "outputKey": "transformed_data"
+  },
+  {
+    "id": "check-duplicates",
+    "type": "decision",
+    "dependencies": [
+      "transform-data"
+    ],
+    "inputKeys": [
+      "transformed_data"
+    ],
+    "outputKey": "duplicate_status"
+  },
+  {
+    "id": "fetch-external-data",
+    "type": "api",
+    "dependencies": [
+      "check-duplicates"
+    ],
+    "inputKeys": [
+      "transformed_data"
+    ],
+    "outputKey": "enriched_data"
+  },
+  {
+    "id": "process-payment",
+    "type": "action",
+    "dependencies": [
+      "fetch-external-data"
+    ],
+    "inputKeys": [
+      "enriched_data"
+    ],
+    "outputKey": "payment_result"
+  },
+  {
+    "id": "send-confirmation",
+    "type": "api",
+    "dependencies": [
+      "process-payment"
+    ],
+    "inputKeys": [
+      "payment_result"
+    ],
+    "outputKey": "confirmation_status"
+  },
+  {
+    "id": "log-audit-trail",
+    "type": "action",
+    "dependencies": [
+      "send-confirmation"
+    ],
+    "inputKeys": [
+      "confirmation_status"
+    ],
+    "outputKey": "audit_log_id"
+  },
+  {
+    "id": "cleanup-resources",
+    "type": "action",
+    "dependencies": [
+      "log-audit-trail"
+    ],
+    "inputKeys": [
+      "audit_log_id"
+    ]
+  },
+  {
+    "id": "error-handler",
+    "type": "action",
+    "dependencies": [],
+    "inputKeys": [
+      "error_details"
+    ]
+  },
+  {
+    "id": "retry-mechanism",
+    "type": "decision",
+    "dependencies": [
+      "error-handler"
+    ],
+    "inputKeys": [
+      "error_details"
+    ],
+    "outputKey": "retry_decision"
+  }
+]

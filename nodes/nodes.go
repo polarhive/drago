@@ -2,6 +2,7 @@ package nodes
 
 import "time"
 
+// NodeState represents the current execution state of a node.
 type NodeState string
 
 const (
@@ -12,27 +13,37 @@ const (
 	Retrying NodeState = "retrying"
 )
 
+// Node represents a single task in the workflow.
 type Node struct {
-	ID           string
-	Type         string
-	Dependencies []string
-	InputKeys    []string
-	OutputKey    string
-	State        NodeState
-	Retries      int
+	ID           string   `json:"id"`           // Unique node identifier
+	Type         string   `json:"type"`         // Type of node (e.g., "task", "decision")
+	Dependencies []string `json:"dependencies"` // List of parent nodes
+	InputKeys    []string `json:"input_keys"`   // Required input keys from KV store
+	OutputKey    string   `json:"output_key"`   // Output key for KV store
+	Retries      int      `json:"retries"`      // Current retry count
+	State        NodeState `json:"state"`       // Execution state
 }
 
+// ExecutionParameters defines execution properties for different node types.
 type ExecutionParameters struct {
-	BaseDelay    time.Duration
-	SuccessRate  float32
-	MaxRetries   int
-	RetryBackoff time.Duration
+	MaxRetries   int           // Maximum number of retries allowed
+	RetryBackoff time.Duration // Backoff duration before retrying
+	BaseDelay    time.Duration // Base execution delay
+	SuccessRate  float32       // Probability of successful execution
 }
 
+// Predefined execution parameters for node types
 var NodeTypes = map[string]ExecutionParameters{
-	"trigger":  {200 * time.Millisecond, 1.0, 0, 0},
-	"compute":  {500 * time.Millisecond, 0.8, 3, 100 * time.Millisecond},
-	"decision": {100 * time.Millisecond, 1.0, 1, 50 * time.Millisecond},
-	"api":      {300 * time.Millisecond, 0.6, 3, 200 * time.Millisecond},
-	"action":   {100 * time.Millisecond, 0.9, 2, 100 * time.Millisecond},
+	"task": {
+		MaxRetries:   3,
+		RetryBackoff: 2 * time.Second,
+		BaseDelay:    1 * time.Second,
+		SuccessRate:  0.9,
+	},
+	"decision": {
+		MaxRetries:   1,
+		RetryBackoff: 1 * time.Second,
+		BaseDelay:    500 * time.Millisecond,
+		SuccessRate:  1.0, // Always succeeds
+	},
 }

@@ -14,22 +14,25 @@ import (
 )
 
 func main() {
+	// Define command-line flags for configuring workers, API port, and workflow file
 	workers := flag.Int("workers", 2, "Number of parallel workers")
 	apiPort := flag.Int("port", 8080, "API server port")
+	workflowFile := flag.String("workflow", "workflow.json", "Workflow file")
 	stepMode := flag.Bool("step", false, "Step mode")
 
 	flag.Parse()
 
+	// Initialize a logger
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	// Initialize DAG and load workflow
+	// Initialize the DAG and load the workflow from JSON
 	d := dag.NewDAG(logger)
-	if err := d.LoadFromJSON("workflow.json"); err != nil {
+	if err := d.LoadFromJSON(*workflowFile); err != nil {
 		logger.Fatal("Failed to load workflow", zap.Error(err))
 	}
 
-	// Validate workflow
+	// Validate workflow structure
 	if err := d.Validate(); err != nil {
 		logger.Error("Workflow validation failed",
 			zap.Error(err),
@@ -38,35 +41,35 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Set up the HTTP API using Gin
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Workflow trigger endpoint
+	// API endpoint to trigger the workflow
 	router.POST("/trigger", func(c *gin.Context) {
 		start := time.Now()
 
+		// Create a new workflow instance
 		wf := workflow.NewWorkflow(d, *workers, *stepMode, logger)
 
-		// Store input data
+		// Parse input data from request body
 		var input map[string]interface{}
 		if err := c.BindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
 			return
 		}
 
-		// Set input data in workflow storage
+		// Store input data in workflow storage
 		for k, v := range input {
 			wf.Set(k, v)
 		}
 
+		// Run the workflow asynchronously
 		go func() {
-			defer func() {
-				logger.Info("Workflow completed",
-					zap.Duration("duration", time.Since(start)),
-				)
-			}()
+			duration := time.Since(start)
+			defer logger.Info("Workflow completed", zap.Duration("duration", duration))
 			wf.Run()
 		}()
 
